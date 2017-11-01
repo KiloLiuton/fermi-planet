@@ -1,13 +1,15 @@
 #include <stdio.h>
+#include <stdlib.h> // rand
 #include <string>
+#include <vector>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 
 // global variables
 const int SCREEN_WIDTH = 1280;
-const int SCREEN_HEIGHT = 960;
+const int SCREEN_HEIGHT = 720;
 
-const float TILE_SCALE = 2.6;
+const float TILE_SCALE = 1.0;
 const int TILE_PX_W = 32;
 const int TILE_PX_H = 32;
 const int TILE_W = TILE_PX_W*TILE_SCALE;
@@ -15,13 +17,47 @@ const int TILE_H = TILE_PX_W*TILE_SCALE;
 
 const int TILE_GRASS = 0;
 const int TILE_METAL = 1;
-const int N_TILES = 2;
 
-SDL_Rect gTileClips[ N_TILES ];
+SDL_Rect gTileClips[ 2 ];
 
 SDL_Window* gWindow;
 SDL_Renderer* gRenderer;
 SDL_Texture* gTexture;
+
+bool initSDL()
+{
+    // initializes SDL and creates a global window and renderer
+    bool success = true;
+    if ( SDL_Init( SDL_INIT_EVERYTHING ) != 0 ) {
+        printf( "Error initializing SDL: %s\n", SDL_GetError() );
+        success = false;
+    }
+    gWindow = SDL_CreateWindow( "Fermi Planet",
+              SDL_WINDOWPOS_CENTERED,
+              SDL_WINDOWPOS_CENTERED,
+              SCREEN_WIDTH,
+              SCREEN_HEIGHT, 0 );
+    if ( gWindow == NULL ) {
+        printf( "Error creating window\n" );
+        success = false;
+    }
+    gRenderer = SDL_CreateRenderer( gWindow, -1, SDL_RENDERER_ACCELERATED );
+    if ( gRenderer == NULL ) {
+        printf( "Error creating renderer\n" );
+        success = false;
+    }
+
+    return success;
+}
+
+bool checkCollision( SDL_Rect A, SDL_Rect B )
+{
+    // if A is outside of B
+    if ( A.x >= B.x+B.w || A.x+A.w <= B.x || A.y >= B.y+B.h || A.y+A.h <= B.y ) {
+        return false;
+    }
+    return true;
+}
 
 SDL_Texture* loadTexture( SDL_Renderer* renderer, std::string path )
 {
@@ -43,61 +79,84 @@ SDL_Texture* loadTexture( SDL_Renderer* renderer, std::string path )
     return loadedTexture;
 }
 
-void setTileClips( SDL_Rect* clips )
-{
-    clips[ TILE_GRASS ].x = 0;
-    clips[ TILE_GRASS ].y = 0;
-    clips[ TILE_GRASS ].w = TILE_PX_W;
-    clips[ TILE_GRASS ].h = TILE_PX_H;
+class Camera {
+public:
+    Camera();
+    void move();
 
-    clips[ TILE_METAL ].x = 0;
-    clips[ TILE_METAL ].y = 32;
-    clips[ TILE_METAL ].w = TILE_PX_W;
-    clips[ TILE_METAL ].h = TILE_PX_H;
+    SDL_Rect getBox() { return this->box; };
+private:
+    SDL_Rect box;
+};
+
+class Tile {
+public:
+    Tile( int x, int y, int type );
+    void render( SDL_Rect& camera );
+
+    int getType() { return this->type; };
+private:
+    int type;
+    SDL_Rect rect;
+};
+Tile::Tile( int x, int y, int type )
+{
+    this->rect.x = x;
+    this->rect.y = y;
+    this->rect.w = TILE_W;
+    this->rect.h = TILE_H;
+    this->type = type;
+}
+void Tile::render( SDL_Rect& camera )
+{
+    if ( checkCollision( this->rect, camera ) ) {
+        SDL_Rect dstRect = { this->rect.x - camera.x,
+                             this->rect.y - camera.y,
+                             TILE_W,
+                             TILE_H
+                           };
+        SDL_RenderCopy( gRenderer, gTexture, &gTileClips[ this->type ], &dstRect );
+    }
 }
 
-const int map[12][12] = 
-    {
-        {0,0,0,0,0,0,0,0,0,0,0,0},
-        {0,1,0,0,0,0,0,0,0,0,0,0},
-        {0,0,0,0,0,0,0,0,0,0,0,0},
-        {0,0,0,0,0,0,0,0,0,0,0,0},
-        {0,0,0,0,1,1,1,1,0,0,0,0},
-        {0,1,0,0,1,1,0,1,0,0,0,0},
-        {0,0,0,0,1,1,1,1,0,0,0,0},
-        {0,0,0,0,1,1,1,1,0,0,0,0},
-        {0,0,0,0,0,0,0,0,0,0,0,0},
-        {0,0,0,0,0,0,0,0,0,0,0,0},
-        {0,0,1,0,0,0,0,0,0,0,1,0},
-        {0,0,0,0,0,0,0,0,0,0,0,0}
-    };
+void setTiles( std::vector<Tile>* tiles )
+{
+    int tileCols = 16;
+    int tileRows = 9;
+    for ( int i=0; i<tileRows; i++ ) {
+        int y = i*TILE_W;
+        for ( int j=0; j<tileCols; j++ ) {
+            int x = j*TILE_H;
+            tiles->push_back( Tile( x, y, rand()%2 ) );
+        }
+    }
+
+    gTileClips[ TILE_GRASS ].x = 0;
+    gTileClips[ TILE_GRASS ].y = 0;
+    gTileClips[ TILE_GRASS ].w = TILE_PX_W;
+    gTileClips[ TILE_GRASS ].h = TILE_PX_H;
+    gTileClips[ TILE_METAL ].x = 0;
+    gTileClips[ TILE_METAL ].y = 32;
+    gTileClips[ TILE_METAL ].w = TILE_PX_W;
+    gTileClips[ TILE_METAL ].h = TILE_PX_H;
+    printf("Tiles set\n");
+}
 
 int main( int argc, char* argv[] )
 {
-    if ( SDL_Init( SDL_INIT_EVERYTHING ) != 0 ) {
-        printf( "Error initializing SDL: %s\n", SDL_GetError() );
-        return 3;
-    }
-    gWindow = SDL_CreateWindow( "Fermi Planet",
-              SDL_WINDOWPOS_CENTERED,
-              SDL_WINDOWPOS_CENTERED,
-              SCREEN_WIDTH,
-              SCREEN_HEIGHT, 0 );
-    if ( gWindow == NULL ) {
-        printf( "Error creating window\n" );
-        return 3;
-    }
-    gRenderer = SDL_CreateRenderer( gWindow, -1, SDL_RENDERER_ACCELERATED );
-    if ( gRenderer == NULL ) {
-        printf( "Error creating renderer\n" );
+    if ( !initSDL() ) {
+        printf( "Error initializing SDL\n" );
         return 3;
     }
 
     gTexture = loadTexture( gRenderer, "textures/tilesSpritesheet.png" );
-    setTileClips( gTileClips );
+    std::vector<Tile> tiles;
+    setTiles( &tiles );
 
+    SDL_Rect camera = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
 
     SDL_Event e;
+
     // MAIN LOOP
     bool quit = false;
     while ( !quit ) {
@@ -106,6 +165,8 @@ int main( int argc, char* argv[] )
             if ( e.type == SDL_QUIT ) {
                 quit = true;
             }
+
+            // TODO: camera.handleEvent( e );
         }
 
         // set positions/game state
@@ -115,20 +176,27 @@ int main( int argc, char* argv[] )
         SDL_RenderClear( gRenderer );
 
         // draw objects to renderer
-        SDL_Rect dstRect = { 0, 0, TILE_W, TILE_H };
-        for ( int i=0; i<12; i++ ) {
-            dstRect.y = i*TILE_H;
-            for ( int j=0; j<12; j++) {
-                dstRect.x = j*TILE_W;
-                SDL_RenderCopy( gRenderer, gTexture, &gTileClips[ map[i][j] ], &dstRect );
-            }
+        for ( int i=0; i < 9*16; i++ ) {
+            tiles[ i ].render( camera );
         }
+        SDL_SetRenderDrawColor( gRenderer, 0xFF, 0, 0, 0xFF );
+        SDL_RenderDrawRect( gRenderer, &camera ); // draw cam in red
+
+        /*
+        // draw blue and red test rectangles
+        SDL_SetRenderDrawColor( gRenderer, 0xFF, 0, 0, 0xFF );
+        SDL_Rect redRect = { SCREEN_WIDTH/2, SCREEN_HEIGHT/2, 400, 200 };
+        SDL_RenderDrawRect( gRenderer, &redRect );
+        SDL_SetRenderDrawColor( gRenderer, 0, 0, 0xFF, 0xFF );
+        SDL_Rect bluRect = { SCREEN_WIDTH/2, SCREEN_HEIGHT/2+200, 400, 200 };
+        SDL_RenderDrawRect( gRenderer, &bluRect );
+        */
 
         // render to screen
         SDL_RenderPresent( gRenderer );
     }
 
     SDL_Quit();
-    printf( "reached end\n" );
+    printf( "SDL quit successfully.\n" );
     return 0;
 }
