@@ -81,13 +81,62 @@ SDL_Texture* loadTexture( SDL_Renderer* renderer, std::string path )
 
 class Camera {
 public:
-    Camera();
+    static const int camSpeed = 1;
+    Camera( int w, int h );
+    void handleEvent( SDL_Event& e );
     void move();
 
-    SDL_Rect getBox() { return this->box; };
+    SDL_Rect& rect() { return box; };
 private:
     SDL_Rect box;
+    int velX, velY;
 };
+Camera::Camera( int w, int h )
+{
+    box.x = 0;
+    box.y = 0;
+    box.w = w;
+    box.h = h;
+
+    velX = 0;
+    velY = 0;
+}
+void Camera::handleEvent( SDL_Event& e )
+{
+    if ( e.type == SDL_KEYDOWN && e.key.repeat == 0 ) {
+        switch ( e.key.keysym.sym ) {
+            case SDLK_UP:
+                printf("UP pressed\n");
+                velY -= camSpeed;
+                break;
+            case SDLK_DOWN:
+                printf("DOWN pressed\n");
+                velY += camSpeed;
+                break;
+            case SDLK_RIGHT:
+                printf("RIGHT pressed\n");
+                velX += camSpeed;
+                break;
+            case SDLK_LEFT:
+                printf("LEFT pressed\n");
+                velX -= camSpeed;
+                break;
+        }
+    }
+    else if ( e.type == SDL_KEYUP && e.key.repeat == 0 ) {
+        switch ( e.key.keysym.sym ) {
+            case SDLK_UP: velY += camSpeed; break;
+            case SDLK_DOWN: velY -= camSpeed; break;
+            case SDLK_RIGHT: velX -= camSpeed; break;
+            case SDLK_LEFT: velX += camSpeed; break;
+        }
+    }
+}
+void Camera::move()
+{
+    box.x += velX;
+    box.y += velY;
+}
 
 class Tile {
 public:
@@ -107,11 +156,11 @@ Tile::Tile( int x, int y, int type )
     this->rect.h = TILE_H;
     this->type = type;
 }
-void Tile::render( SDL_Rect& camera )
+void Tile::render( SDL_Rect& camRect )
 {
-    if ( checkCollision( this->rect, camera ) ) {
-        SDL_Rect dstRect = { this->rect.x - camera.x,
-                             this->rect.y - camera.y,
+    if ( checkCollision( this->rect, camRect ) ) {
+        SDL_Rect dstRect = { this->rect.x - camRect.x,
+                             this->rect.y - camRect.y,
                              TILE_W,
                              TILE_H
                            };
@@ -119,18 +168,21 @@ void Tile::render( SDL_Rect& camera )
     }
 }
 
-void setTiles( std::vector<Tile>* tiles )
+void loadChunk( std::vector<Tile>& chunk )
 {
-    int tileCols = 16;
-    int tileRows = 9;
+    int tileCols = 40;
+    int tileRows = 40;
     for ( int i=0; i<tileRows; i++ ) {
         int y = i*TILE_W;
         for ( int j=0; j<tileCols; j++ ) {
             int x = j*TILE_H;
-            tiles->push_back( Tile( x, y, rand()%2 ) );
+            chunk.push_back( Tile( x, y, rand()%2 ) );
         }
     }
+}
 
+void setClips()
+{
     gTileClips[ TILE_GRASS ].x = 0;
     gTileClips[ TILE_GRASS ].y = 0;
     gTileClips[ TILE_GRASS ].w = TILE_PX_W;
@@ -139,7 +191,7 @@ void setTiles( std::vector<Tile>* tiles )
     gTileClips[ TILE_METAL ].y = 32;
     gTileClips[ TILE_METAL ].w = TILE_PX_W;
     gTileClips[ TILE_METAL ].h = TILE_PX_H;
-    printf("Tiles set\n");
+    printf("Clips set\n");
 }
 
 int main( int argc, char* argv[] )
@@ -151,9 +203,10 @@ int main( int argc, char* argv[] )
 
     gTexture = loadTexture( gRenderer, "textures/tilesSpritesheet.png" );
     std::vector<Tile> tiles;
-    setTiles( &tiles );
+    setClips();
+    loadChunk( tiles );
 
-    SDL_Rect camera = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
+    Camera camera( SCREEN_WIDTH, SCREEN_HEIGHT );
 
     SDL_Event e;
 
@@ -166,21 +219,22 @@ int main( int argc, char* argv[] )
                 quit = true;
             }
 
-            // TODO: camera.handleEvent( e );
+            camera.handleEvent( e );
         }
 
         // set positions/game state
+        camera.move();
 
         // clear the renderer
         SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
         SDL_RenderClear( gRenderer );
 
         // draw objects to renderer
-        for ( int i=0; i < 9*16; i++ ) {
-            tiles[ i ].render( camera );
+        for ( int i=0; i < 40*40; i++ ) {
+            tiles[ i ].render( camera.rect() );
         }
-        SDL_SetRenderDrawColor( gRenderer, 0xFF, 0, 0, 0xFF );
-        SDL_RenderDrawRect( gRenderer, &camera ); // draw cam in red
+        //SDL_SetRenderDrawColor( gRenderer, 0xFF, 0, 0, 0xFF );
+        //SDL_RenderDrawRect( gRenderer, &camera.rect() ); // draw cam in red
 
         /*
         // draw blue and red test rectangles
