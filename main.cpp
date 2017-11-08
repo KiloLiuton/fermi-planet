@@ -10,7 +10,6 @@
 #include <SDL2/SDL_ttf.h>
 
 struct vec2 {
-
     float x;
     float y;
 
@@ -151,7 +150,7 @@ SDL_Texture* loadTextTexture( std::string textureText, SDL_Color textColor )
 }
 
 namespace camera_constants {
-    const float camSpeed = 8.f;
+    const float camSpeed = 8.0;
 }
 
 class Camera {
@@ -231,8 +230,8 @@ void Camera::move()
 {
     this->pos.x += this->velX;
     this->pos.y += this->velY;
-    this->box.x = (int) this->pos.x;
-    this->box.y = (int) this->pos.y;
+    this->box.x = round( this->pos.x );
+    this->box.y = round( this->pos.y );
 }
 
 class Tile {
@@ -257,10 +256,10 @@ void Tile::render( Camera& cam )
 {
     float scale = (float) SCREEN_WIDTH / cam.rect().w;
     if ( checkCollision( this->rect, cam.rect() ) ) {
-        SDL_Rect dstRect = { (int) ( ( this->rect.x - cam.getPos().x ) * scale ),
-                             (int) ( ( this->rect.y - cam.getPos().y ) * scale ),
-                             (int) ( ( this->rect.w ) * scale ),
-                             (int) ( ( this->rect.h ) * scale )
+        SDL_Rect dstRect = { (int) round( ( this->rect.x - cam.getPos().x ) * scale ),
+                             (int) round( ( this->rect.y - cam.getPos().y ) * scale ),
+                             (int) round( ( this->rect.w ) * scale ),
+                             (int) round( ( this->rect.h ) * scale )
                            };
         SDL_RenderCopy( gRenderer, gTileTexture, &gTileClips[ this->type ], &dstRect );
     }
@@ -346,10 +345,9 @@ int main( int argc, char* argv[] )
             camera.handleEvent( e );
         }
 
-
         // set positions/game state
         FPSText.str( "" );
-        float FPSTime = frameNumber / ((SDL_GetTicks() - FPSStart) / 1000.f);
+        float FPSTime = frameNumber / ((SDL_GetTicks() - FPSStart) / 1000.0);
         if ( FPSTime > 2000000 ) {
             FPSTime = 0;
         }
@@ -376,8 +374,8 @@ int main( int argc, char* argv[] )
 
         int FRAME_END_MS = SDL_GetTicks();
         int FRAME_ELAPSED_TIME = FRAME_END_MS - FRAME_BEGIN_MS;
-        if ( FRAME_ELAPSED_TIME < 1000.f/60.f ) {
-            SDL_Delay( 1000.f/60.f - FRAME_ELAPSED_TIME );
+        if ( FRAME_ELAPSED_TIME < 1000.0/60.0 ) {
+            SDL_Delay( 1000.0/60.0 - FRAME_ELAPSED_TIME );
         }
     }
 
