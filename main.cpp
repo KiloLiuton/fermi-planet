@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h> // rand
+#include <math.h>
 #include <string>
 #include <vector>
 #include <sstream>
@@ -8,6 +9,52 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
+
+struct vec2 {
+    double x;
+    double y;
+
+    vec2( double x=0, double y=0 ) : x(x), y(y)
+    {
+    }
+
+    vec2 operator=( const vec2& other )
+    {
+        x = other.x;
+        y = other.y;
+        return *this;
+    }
+
+    vec2 operator+( const vec2& other ) const
+    {
+        return vec2( x + other.x, y + other.y );
+    }
+
+    vec2 operator-( const vec2& other ) const
+    {
+        return vec2( x - other.x, y - other.y );
+    }
+
+    bool operator==( const vec2& other ) const
+    {
+        return ( other.x == x && other.y == y );
+    }
+
+    double norm()
+    {
+        return sqrt( x*x + y*y );
+    }
+
+    double dotProd( vec2 other )
+    {
+        return x * other.x + y * other.y;
+    }
+
+    std::string str()
+    {
+        return "(" + std::to_string(x) + "," + std::to_string(y) + ")";
+    }
+};
 
 // global variables
 const int SCREEN_WIDTH = 1280;
@@ -109,58 +156,63 @@ SDL_Texture* loadTextTexture( std::string textureText, SDL_Color textColor )
 }
 
 namespace camera_constants {
-    const float camSpeed = 8.f;
-}
+    const double baseCamSpeed = 8.0;
+};
 
 class Camera {
 public:
     Camera( int w, int h );
+    ~Camera();
     void handleEvent( SDL_Event& e );
     void move();
-    float getZoom() { return this->zoom; };
-    bool zoomedThisTick;
 
-    SDL_Rect& rect() { return box; };
+    vec2 getPos() { return this->pos; };
+    SDL_Rect& rect() { return this->box; };
+    SDL_Texture* texture() { return camTexture; };
 private:
-    float zoom;
+    SDL_Texture* camTexture;
+    double camSpeed;
     SDL_Rect box;
-    float x, y;
-    float velX, velY;
+    vec2 pos;
+    double velX, velY;
+    double zoom;
 };
 Camera::Camera( int w, int h )
 {
+    this->camTexture = SDL_CreateTexture( gRenderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, SCREEN_WIDTH, SCREEN_HEIGHT );
     this->box.x = 0;
     this->box.y = 0;
     this->box.w = w;
     this->box.h = h;
-    this->x = 0;
-    this->y = 0;
+    this->pos = vec2( 0.0, 0.0 );
     this->velX = 0;
     this->velY = 0;
-    this->zoom = 0.5f;
-    this->zoomedThisTick = false;
+    this->camSpeed = 8.0;
+    this->zoom = 1.0;
+}
+Camera::~Camera()
+{
+    SDL_DestroyTexture( this->camTexture );
 }
 void Camera::handleEvent( SDL_Event& e )
 {
-    this->zoomedThisTick = false;
-    // if an arrow key is pressed
+    // on arrow key pressed else released
     if ( e.type == SDL_KEYDOWN && e.key.repeat == 0 ) {
         switch ( e.key.keysym.sym ) {
             case SDLK_UP:
-                this->velY = -camera_constants::camSpeed;
+                this->velY = -this->camSpeed;
                 break;
             case SDLK_DOWN:
-                this->velY = camera_constants::camSpeed;
+                this->velY = this->camSpeed;
                 break;
             case SDLK_RIGHT:
-                this->velX = camera_constants::camSpeed;
+                this->velX = this->camSpeed;
                 break;
             case SDLK_LEFT:
-                this->velX = -camera_constants::camSpeed;
+                this->velX = -this->camSpeed;
                 break;
         }
     }
-    // if an arrow key is released
     else if ( e.type == SDL_KEYUP && e.key.repeat == 0 ) {
         if ( e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN ) {
             this->velY = 0;
@@ -169,39 +221,41 @@ void Camera::handleEvent( SDL_Event& e )
             this->velX = 0;
         }
     }
-    // if mouse scroll
-    if ( e.wheel.y == 1 ) { // scroll up
+    // on mouse scroll up else down
+    if ( e.wheel.y == 1 ) {
         this->zoom += 0.025;
         if ( this->zoom > 1.0 ) {
             this->zoom = 1.0;
         }
-        this->zoomedThisTick = true;
-        printf("zoom: %f\n", this->zoom);
+        this->box.w = SCREEN_WIDTH * this->zoom;
+        this->box.h = SCREEN_HEIGHT * this->zoom;
+        this->camSpeed = camera_constants::baseCamSpeed * this->zoom;
+        printf("zoom: %f camSpeed: %f\n", this->zoom, this->camSpeed );
     }
-    else if ( e.wheel.y == -1 ) { // scroll down
+    else if ( e.wheel.y == -1 ) {
         this->zoom -= 0.025;
-        if ( this->zoom <= 0.0 ) {
+        if ( this->zoom <= 0.025 ) {
             this->zoom = 0.025;
         }
-        this->zoomedThisTick = true;
-        printf("zoom: %f\n", this->zoom);
+        this->box.w = SCREEN_WIDTH * this->zoom;
+        this->box.h = SCREEN_HEIGHT * this->zoom;
+        this->camSpeed = camera_constants::baseCamSpeed * this->zoom;
+        printf("zoom: %f camSpeed: %f\n", this->zoom, this->camSpeed );
     }
 }
 void Camera::move()
 {
-    this->x += this->velX;
-    this->y += this->velY;
-    this->box.x = (int) this->x;
-    this->box.y = (int) this->y;
+    this->pos.x += this->velX;
+    this->pos.y += this->velY;
+    this->box.x = round( this->pos.x );
+    this->box.y = round( this->pos.y );
 }
 
 class Tile {
 public:
     Tile( int x, int y, int type );
-    void render( SDL_Rect& camera );
-    void applyZoom( int row, int col, float zoomLevel );
+    void render( Camera& cam );
 
-    int getWidth() { return this->rect.w; };
     int getType() { return this->type; };
 private:
     int type;
@@ -215,23 +269,16 @@ Tile::Tile( int x, int y, int type )
     this->rect.h = TILE_H;
     this->type = type;
 }
-void Tile::render( SDL_Rect& camRect )
+void Tile::render( Camera& cam )
 {
-    if ( checkCollision( this->rect, camRect ) ) {
-        SDL_Rect dstRect = { this->rect.x - camRect.x,
-                             this->rect.y - camRect.y,
+    if ( checkCollision( this->rect, cam.rect() ) ) {
+        SDL_Rect dstRect = { this->rect.x - cam.rect().x,
+                             this->rect.y - cam.rect().y,
                              this->rect.w,
                              this->rect.h
                            };
         SDL_RenderCopy( gRenderer, gTileTexture, &gTileClips[ this->type ], &dstRect );
     }
-}
-void Tile::applyZoom( int row, int col, float zoomLevel )
-{
-    this->rect.w = TILE_W * zoomLevel;
-    this->rect.h = TILE_H * zoomLevel;
-    this->rect.x = this->rect.w * col;
-    this->rect.y = this->rect.h * row;
 }
 
 void loadChunk( std::vector<Tile>& chunk, int length )
@@ -241,15 +288,6 @@ void loadChunk( std::vector<Tile>& chunk, int length )
         for ( int j=0; j<length; j++ ) {
             int x = j * TILE_H;
             chunk.push_back( Tile( x, y, rand()%2 ) );
-        }
-    }
-}
-
-void zoomChunk( std::vector<Tile>& chunk, int length, float zoomLevel )
-{
-    for ( int i=0; i<length; i++ ) {
-        for ( int j=0; j<length; j++ ) {
-            chunk[ i*length + j ].applyZoom( i, j, zoomLevel );
         }
     }
 }
@@ -273,7 +311,7 @@ void setClips()
 bool loadMedia()
 {
     gFont = TTF_OpenFont( "lazy.ttf", 28 );
-    if (gFont == NULL ) {
+    if ( gFont == NULL ) {
         printf( "Failed to load text font! SDL_ttf Error: %s\n", TTF_GetError() );
         return false;
     }
@@ -323,19 +361,15 @@ int main( int argc, char* argv[] )
             camera.handleEvent( e );
         }
 
-
         // set positions/game state
         FPSText.str( "" );
-        float FPSTime = frameNumber / ((SDL_GetTicks() - FPSStart) / 1000.f);
+        float FPSTime = frameNumber / ((SDL_GetTicks() - FPSStart) / 1000.0);
         if ( FPSTime > 2000000 ) {
             FPSTime = 0;
         }
         FPSText << "FPS: " << FPSTime;
         gFPSTexture = loadTextTexture( FPSText.str().c_str(), FPStextColor );
         camera.move();
-        if ( camera.zoomedThisTick ) {
-            zoomChunk( chunk, 64, camera.getZoom()*2.5 );
-        }
 
         // clear the renderer
         SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
@@ -343,10 +377,10 @@ int main( int argc, char* argv[] )
 
         // draw objects to renderer
         for ( int i=0; i < 64*64; i++ ) {
-            chunk[ i ].render( camera.rect() );
+            chunk[ i ].render( camera );
         }
-        //SDL_SetRenderDrawColor( gRenderer, 0xFF, 0, 0, 0xFF );
-        //SDL_RenderDrawRect( gRenderer, &camera.rect() ); // draw cam in red
+        SDL_SetRenderDrawColor( gRenderer, 0xFF, 0, 0, 0xFF );
+        SDL_RenderDrawRect( gRenderer, &camera.rect() ); // draw cam in red
         SDL_Rect FPSTextPos = { 0, 0, 200, 50 };
         SDL_RenderCopy( gRenderer, gFPSTexture, NULL, &FPSTextPos );
 
@@ -356,8 +390,8 @@ int main( int argc, char* argv[] )
 
         int FRAME_END_MS = SDL_GetTicks();
         int FRAME_ELAPSED_TIME = FRAME_END_MS - FRAME_BEGIN_MS;
-        if ( FRAME_ELAPSED_TIME < 1000.f/60.f ) {
-            SDL_Delay( 1000.f/60.f - FRAME_ELAPSED_TIME );
+        if ( FRAME_ELAPSED_TIME < 1000.0/60.0 ) {
+            SDL_Delay( 1000.0/60.0 - FRAME_ELAPSED_TIME );
         }
     }
 
