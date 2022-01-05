@@ -5,6 +5,7 @@
 #include <sstream>
 
 #include <SDL2/SDL.h>
+#include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 
@@ -71,7 +72,7 @@ SDL_Texture* loadTexture( SDL_Renderer* renderer, std::string path )
     SDL_Texture* loadedTexture = NULL;
     SDL_Surface* surf = IMG_Load( path.c_str() );
     if ( surf == NULL ) {
-        printf( "Unable to load image %s! SDL_image Error: %s\n", path.c_str(), IMG_GetError() );
+        printf( "Unable to load image %s! SDL_image Error: %s\n", path.c_str(), SDL_GetError() );
         return NULL;
     }
     else {
